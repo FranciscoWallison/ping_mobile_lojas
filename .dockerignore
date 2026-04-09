@@ -1,0 +1,32 @@
+# Saidas geradas
+*.json
+*.pdf
+
+# Cache Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Ambientes virtuais
+venv/
+.venv/
+env/
+
+# IDEs
+.vscode/
+.idea/
+
+# Variaveis de ambiente
+.env
+
+# Git
+.git/
+.gitignore
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
+
+# Documentacao (nao necessaria na imagem)
+README.md

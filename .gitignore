@@ -1,0 +1,33 @@
+# Saidas geradas pelo monitor
+*.json
+*.pdf
+
+# Cache Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pdb
+
+# Ambientes virtuais
+venv/
+.venv/
+env/
+.env/
+ENV/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Variaveis de ambiente / segredos
+.env
+.env.local
+.env.*.local
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
+desktop.ini
