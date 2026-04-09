@@ -1,4 +1,4 @@
-# gp-monitor — Monitor de Disponibilidade Multi-Região
+# Monitor de Disponibilidade Multi-Região
 
 Ferramenta de linha de comando para validar se uma URL está acessível em múltiplas regiões do mundo, usando a API pública do [GlobalPing](https://globalping.io). Ideal para diagnosticar bloqueios geográficos, problemas de DNS, falhas de TLS e indisponibilidade real.
 
@@ -292,5 +292,6 @@ files/
 4. **Fingerprint TLS** — detectar MITM comparando o certificado entre regiões
 5. **Análise de CDN** — identificar headers de CDN (Cloudflare, Akamai, AWS CloudFront) por região
 6. **Modo watch** — repetir a verificação automaticamente a cada N minutos
-#   p i n g _ m o b i l e _ l o j a s  
+#   p i n g _ m o b i l e _ l o j a s 
+ 
  
