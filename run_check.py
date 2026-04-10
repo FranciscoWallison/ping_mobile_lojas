@@ -10,8 +10,11 @@ Uso:
 import argparse
 import os
 import sys
+from pathlib import Path
 
 from globalping_monitor import diagnose, print_report, save_json
+
+OUTPUT_DIR = Path(__file__).parent / "output"
 
 
 DEFAULT_REGIONS = [
@@ -50,7 +53,10 @@ def main():
 
     print_report(target, reports)
     if args.json_out:
-        save_json(reports, args.json_out)
+        OUTPUT_DIR.mkdir(exist_ok=True)
+        json_path = args.json_out if os.sep in args.json_out or "/" in args.json_out \
+            else str(OUTPUT_DIR / args.json_out)
+        save_json(reports, json_path)
 
 
 if __name__ == "__main__":

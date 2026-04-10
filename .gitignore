@@ -1,6 +1,6 @@
-# Saidas geradas pelo monitor
-*.json
-*.pdf
+# Saidas geradas pelo monitor (ficam em output/)
+output/*
+!output/.gitkeep
 
 # Cache Python
 __pycache__/

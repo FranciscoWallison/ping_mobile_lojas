@@ -22,7 +22,11 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+from pathlib import Path
+
 from fpdf import FPDF, XPos, YPos
+
+OUTPUT_DIR = Path(__file__).parent / "output"
 
 # ---------------------------------------------------------------------------
 # Constantes
@@ -396,6 +400,7 @@ def build_pdf(
         pdf.page = page
         _draw_footer(pdf)
 
+    OUTPUT_DIR.mkdir(exist_ok=True)
     pdf.output(output_path)
     print(f"[+] PDF salvo em: {output_path}")
 
@@ -461,12 +466,12 @@ def main() -> None:
         print("[!] Nenhum dado para gerar o relatório.", file=sys.stderr)
         sys.exit(1)
 
-    # Define nome do arquivo de saída
+    # Define nome do arquivo de saída (padrão: output/<alvo>_relatorio.pdf)
     if args.output:
         output_path = args.output
     else:
         safe_name = target.replace(".", "_").replace("/", "_")
-        output_path = f"{safe_name}_relatorio.pdf"
+        output_path = str(OUTPUT_DIR / f"{safe_name}_relatorio.pdf")
 
     build_pdf(target, reports, author=args.author, output_path=output_path)
 

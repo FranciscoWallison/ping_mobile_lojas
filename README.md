@@ -145,9 +145,9 @@ python report_pdf.py odontoprev.com.br
 python report_pdf.py odontoprev.com.br --regions BR US DE JP --output diag.pdf
 python report_pdf.py odontoprev.com.br --token $GLOBALPING_TOKEN
 
-# Fluxo completo recomendado
+# Fluxo completo recomendado (arquivos salvos em output/)
 python gp_check.py meusite.com --json resultado.json
-python report_pdf.py --json resultado.json --output relatorio_final.pdf
+python report_pdf.py --json output/resultado.json
 ```
 
 **Conteúdo do PDF:**
@@ -275,9 +275,11 @@ files/
 ├── run_check.py             # CLI que usa globalping_monitor como módulo
 ├── validate_odontoprev.py   # Script específico para odontoprev.com.br
 ├── report_pdf.py            # Gerador de relatório PDF (autor, data/hora, tabelas)
+├── output/                  # Saídas geradas (JSONs e PDFs) — ignorada pelo git
+│   └── .gitkeep             # Mantém a pasta no repositório mesmo vazia
 ├── requirements.txt         # Dependências Python: requests, fpdf2
 ├── Dockerfile               # Container Docker com entrypoint gp_check.py
-├── .gitignore               # Ignora *.json, *.pdf, __pycache__, .env, etc.
+├── .gitignore               # Ignora output/*.json e output/*.pdf
 ├── .dockerignore            # Exclui arquivos desnecessários do contexto Docker
 └── README.md                # Esta documentação
 ```
@@ -292,6 +294,3 @@ files/
 4. **Fingerprint TLS** — detectar MITM comparando o certificado entre regiões
 5. **Análise de CDN** — identificar headers de CDN (Cloudflare, Akamai, AWS CloudFront) por região
 6. **Modo watch** — repetir a verificação automaticamente a cada N minutos
-#   p i n g _ m o b i l e _ l o j a s 
- 
- 

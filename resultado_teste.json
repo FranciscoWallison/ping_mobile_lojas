@@ -1,0 +1,73 @@
+{
+  "Sao Paulo, BR": {
+    "region": "Sao Paulo, BR",
+    "probe_country": "BR",
+    "probe_city": "Sao Paulo",
+    "probe_asn": "31898",
+    "http_status": 200,
+    "http_total_ms": 288,
+    "http_dns_ms": 51,
+    "http_tcp_ms": 51,
+    "http_tls_ms": 125,
+    "http_first_byte_ms": 57,
+    "http_resolved_ip": "201.59.24.24",
+    "http_tls_subject": "*.odontoprev.com.br",
+    "http_tls_issuer": "Go Daddy Secure Certificate Authority - G2",
+    "dns_resolved_ips": [
+      "187.51.14.84",
+      "201.59.24.24"
+    ],
+    "mtr_last_hop": "",
+    "mtr_packet_loss": 100,
+    "verdict": "OK",
+    "notes": []
+  },
+  "Buffalo, US": {
+    "region": "Buffalo, US",
+    "probe_country": "US",
+    "probe_city": "Buffalo",
+    "probe_asn": "36352",
+    "http_status": 200,
+    "http_total_ms": 798,
+    "http_dns_ms": 251,
+    "http_tcp_ms": 132,
+    "http_tls_ms": 274,
+    "http_first_byte_ms": 137,
+    "http_resolved_ip": "201.59.24.24",
+    "http_tls_subject": "*.odontoprev.com.br",
+    "http_tls_issuer": "Go Daddy Secure Certificate Authority - G2",
+    "dns_resolved_ips": [
+      "187.51.14.84",
+      "201.59.24.24"
+    ],
+    "mtr_last_hop": "",
+    "mtr_packet_loss": 100,
+    "verdict": "OK",
+    "notes": []
+  },
+  "London, GB": {
+    "region": "London, GB",
+    "probe_country": "GB",
+    "probe_city": "London",
+    "probe_asn": "16276",
+    "http_status": null,
+    "http_total_ms": null,
+    "http_dns_ms": null,
+    "http_tcp_ms": null,
+    "http_tls_ms": null,
+    "http_first_byte_ms": null,
+    "http_resolved_ip": "",
+    "http_tls_subject": "",
+    "http_tls_issuer": "",
+    "dns_resolved_ips": [
+      "187.51.14.84",
+      "201.59.24.24"
+    ],
+    "mtr_last_hop": "",
+    "mtr_packet_loss": 100,
+    "verdict": "TIMEOUT",
+    "notes": [
+      "HTTP timeout no probe"
+    ]
+  }
+}

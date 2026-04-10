@@ -19,8 +19,11 @@ import os
 import sys
 import time
 from dataclasses import dataclass, field, asdict
+from pathlib import Path
 
 import requests
+
+OUTPUT_DIR = Path(__file__).parent / "output"
 
 API = "https://api.globalping.io/v1/measurements"
 POLL_INTERVAL = 1.0
@@ -308,7 +311,11 @@ def main():
 
     print_report(target, reports)
     if args.json_out:
-        save_json(reports, args.json_out)
+        OUTPUT_DIR.mkdir(exist_ok=True)
+        # Se não tiver separador de pasta no caminho, salva em output/
+        json_path = args.json_out if os.sep in args.json_out or "/" in args.json_out \
+            else str(OUTPUT_DIR / args.json_out)
+        save_json(reports, json_path)
 
 
 if __name__ == "__main__":
