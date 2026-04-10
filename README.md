@@ -30,7 +30,37 @@ Identificador único de uma rede na internet. Cada provedor de internet, empresa
 O Google Play valida URLs a partir dos seus próprios servidores (ASN 15169). Se o WAF de um servidor bloquear esse ASN, o Google não consegue acessar a URL — e a política de privacidade é rejeitada.
 
 ### WAF (Web Application Firewall)
-Firewall na camada de aplicação que analisa o conteúdo das requisições HTTP. Pode bloquear por IP de origem, ASN, User-Agent, país, ou padrão de tráfego. Quando o WAF bloqueia, o cliente recebe HTTP 403 ou simplesmente não recebe resposta (timeout).
+
+Firewall na camada de aplicação que fica na frente do servidor web e analisa cada requisição HTTP antes de ela chegar ao sistema. Diferente de um firewall de rede comum (que bloqueia por IP/porta), o WAF entende o conteúdo das requisições — headers, corpo, cookies, User-Agent — e toma decisões baseadas nisso.
+
+**Como o WAF decide o que bloquear:**
+
+| Critério | Exemplo | Resposta típica |
+|---|---|---|
+| IP de origem | Faixas de IPs de data center | Timeout ou HTTP 403 |
+| ASN | ASN 15169 (Google), ASN 36352 (HostPapa) | Timeout ou HTTP 403 |
+| País/região | Bloquear acessos de fora do Brasil | HTTP 403 ou redirect |
+| User-Agent | Bots, scrapers, crawlers | HTTP 403 ou CAPTCHA |
+| Taxa de requisições | Muitas requisições por segundo | HTTP 429 ou bloqueio |
+| Padrão de tráfego | Sequências suspeitas de URLs | HTTP 403 |
+
+**Por que isso afeta validações de lojas de apps:**
+
+O Google Play e a Apple App Store validam URLs (como política de privacidade) a partir dos seus próprios servidores em data centers americanos. Esses IPs pertencem a faixas conhecidas de provedores de nuvem — exatamente o tipo de tráfego que WAFs conservadores bloqueiam por padrão, por confundi-los com bots ou scrapers.
+
+**Como o monitor detecta WAF:**
+
+- `TIMEOUT` → WAF descartou o pacote sem responder (modo silencioso)
+- `BLOCKED` → WAF respondeu com HTTP 403/451 (modo explícito)
+- O MTR chega ao servidor, mas o HTTP não responde → o bloqueio acontece na camada de aplicação, não na rede
+
+**Exemplos de WAFs comuns:**
+
+- **Cloudflare** — muito comum em sites brasileiros; bloqueia por reputação de IP
+- **AWS WAF** — usado com CloudFront e API Gateway
+- **Akamai Kona** — comum em grandes empresas e bancos
+- **F5 / NGINX App Protect** — infraestrutura on-premise
+- **Imperva** — foco em proteção contra DDoS e bots
 
 ### GeoDNS
 Técnica onde o servidor DNS retorna IPs diferentes dependendo da localização do requisitante. É legítimo em CDNs (para direcionar o usuário ao servidor mais próximo), mas pode ser confundido com envenenamento de DNS. O monitor detecta automaticamente quando IPs DNS divergem entre regiões.
