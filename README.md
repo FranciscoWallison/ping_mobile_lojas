@@ -1,5 +1,7 @@
 # Monitor de Disponibilidade Multi-Região
 
+
+
 Ferramenta de linha de comando para validar se uma URL está acessível em múltiplas regiões do mundo, usando a API pública do [GlobalPing](https://globalping.io). Ideal para diagnosticar bloqueios geográficos, problemas de DNS, falhas de TLS e indisponibilidade real.
 
 ---
