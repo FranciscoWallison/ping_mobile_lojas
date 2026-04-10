@@ -25,9 +25,46 @@ Esta ferramenta valida o que realmente importa:
 ## Glossário de Termos
 
 ### ASN (Autonomous System Number)
-Identificador único de uma rede na internet. Cada provedor de internet, empresa de hospedagem ou big tech tem o seu. Exemplo: **ASN 15169 = Google**, **ASN 7628 = Claro Brasil**.
 
-O Google Play valida URLs a partir dos seus próprios servidores (ASN 15169). Se o WAF de um servidor bloquear esse ASN, o Google não consegue acessar a URL — e a política de privacidade é rejeitada.
+ASN é o "documento de identidade" de uma rede na internet. Cada organização que opera uma rede de grande porte — provedores de internet, empresas de hospedagem, big techs, bancos, operadoras — recebe um número único chamado ASN, emitido pela IANA (Internet Assigned Numbers Authority) através de registros regionais como o LACNIC (América Latina) e ARIN (América do Norte).
+
+**Como funciona na prática:**
+
+Quando seu computador acessa um site, o pacote passa por vários roteadores. Cada roteador sabe para qual ASN encaminhar o tráfego usando um protocolo chamado BGP (Border Gateway Protocol). O BGP é essencialmente um mapa global que diz: "para chegar ao IP X, passe pelo ASN Y".
+
+Todo ASN agrupa um conjunto de faixas de IPs (chamadas de prefixos). Por exemplo:
+- O ASN 15169 (Google) agrupa faixas como `8.8.8.0/24`, `142.250.0.0/15`, entre centenas de outros
+- O ASN 7628 (Claro Brasil) agrupa os IPs que a Claro entrega para seus clientes no Brasil
+
+**ASNs relevantes para monitoramento:**
+
+| ASN | Organização | Por que importa |
+|---|---|---|
+| 15169 | Google LLC | Google Play, Google Search, YouTube — valida URLs a partir daqui |
+| 16509 | Amazon AWS | Servidores EC2, Lambda — muito bloqueado por WAFs |
+| 8075 | Microsoft Azure | Teams, Office 365, Azure Functions |
+| 14618 | Amazon / AWS | Outra faixa AWS, igualmente bloqueada |
+| 36351 | SoftLayer (IBM) | Frequentemente na lista negra de WAFs |
+| 7628 | Claro Brasil | ISP residencial/corporativo BR |
+| 4230 | Oi Brasil | ISP residencial BR |
+| 28573 | Claro / NET Brasil | Banda larga residencial BR |
+
+**Por que WAFs bloqueiam determinados ASNs:**
+
+IPs de grandes provedores de nuvem (Google, AWS, Azure) são conhecidos por hospedar bots, scrapers e ferramentas de ataque automatizado. WAFs com perfil conservador bloqueiam faixas inteiras de IPs de data center por padrão — mesmo que o tráfego legítimo (como o Google validando uma URL) venha do mesmo bloco.
+
+**Como verificar o ASN de um IP:**
+
+```bash
+# Usando whois
+whois 142.250.78.46
+
+# Resultado mostra: OrgName: Google LLC, ASN: AS15169
+```
+
+**Impacto direto no seu caso:**
+
+O Google Play valida URLs (política de privacidade, termos de uso) a partir de servidores com ASN 15169. Se o WAF da Odontoprev bloqueia requisições desse ASN — mesmo sem intenção — o Google recebe timeout e rejeita o link. O monitor confirmou exatamente isso: regiões com IPs de data center (Buffalo/US com ASN M247, Falkenstein/DE) receberam timeout, enquanto IPs de provedores comuns (ISPs residenciais e comerciais) respondem normalmente.
 
 ### WAF (Web Application Firewall)
 
