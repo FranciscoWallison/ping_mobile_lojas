@@ -15,6 +15,8 @@ from dataclasses import dataclass, field, asdict
 from typing import Any
 import requests
 
+from waf_fingerprint import classify_block, fingerprint_response, stack_labels
+
 
 GLOBALPING_API = "https://api.globalping.io/v1/measurements"
 POLL_INTERVAL = 1.0          # segundos entre GETs enquanto a medição não finaliza
@@ -84,6 +86,10 @@ class RegionReport:
     # MTR / rota
     mtr_last_hop: str = ""
     mtr_packet_loss: float | None = None
+    # Pilha de rede (CDN / WAF / F5 / origem) e quem respondeu o bloqueio
+    edge_stack: list[str] = field(default_factory=list)
+    block_source: str = ""
+    block_hint: str = ""
     # Classificação final
     verdict: str = "UNKNOWN"   # OK / TIMEOUT / BLOCKED / DNS_FAIL / TLS_FAIL / ERROR
     notes: list[str] = field(default_factory=list)
@@ -129,6 +135,13 @@ def parse_http(result: dict, reports: dict[str, RegionReport], region_key: str):
             rep.http_tls_subject = subj.get("CN", "")
             rep.http_tls_issuer = issu.get("CN", "")
 
+        # Fingerprint pelos headers/cookies/corpo que o probe recebeu
+        headers = r.get("headers") or {}
+        body = r.get("rawBody") or ""
+        rep.edge_stack = stack_labels(fingerprint_response(headers, body))
+        block = classify_block(rep.http_status, headers, body)
+        known_block = block if block and block.source != "indefinido" else None
+
         # Classificação preliminar
         if r.get("status") == "failed" or rep.http_status is None:
             if "timeout" in raw.lower() or "timed out" in raw.lower():
@@ -147,12 +160,22 @@ def parse_http(result: dict, reports: dict[str, RegionReport], region_key: str):
             rep.verdict = "OK"
         elif rep.http_status in (403, 451):
             rep.verdict = "BLOCKED"
-            rep.notes.append(f"HTTP {rep.http_status} — provável bloqueio geo/WAF")
+            rep.block_source = known_block.short() if known_block else ""
+            rep.block_hint = known_block.hint if known_block else ""
+            rep.notes.append(f"HTTP {rep.http_status} — "
+                             f"{rep.block_source or 'provável bloqueio geo/WAF'}")
         elif rep.http_status >= 500:
             rep.verdict = "ERROR"
             rep.notes.append(f"HTTP {rep.http_status}")
         else:
-            rep.notes.append(f"HTTP {rep.http_status}")
+            rep.block_source = known_block.short() if known_block else ""
+            rep.notes.append(f"HTTP {rep.http_status}"
+                             + (f" — {rep.block_source}" if rep.block_source else ""))
+
+
+def aggregate_stack(reports) -> list[str]:
+    """Une a pilha vista por todas as regiões, mantendo a ordem internet -> aplicação."""
+    return list(dict.fromkeys(label for r in reports for label in r.edge_stack))
 
 
 def parse_dns(result: dict, reports: dict[str, RegionReport], region_key: str):
@@ -280,6 +303,9 @@ VERDICT_ICONS = {
 def print_report(target: str, reports: dict[str, RegionReport]) -> None:
     print("\n" + "=" * 78)
     print(f" RELATÓRIO — {target}")
+    stack = aggregate_stack(reports.values())
+    if stack:
+        print(f" Pilha de rede: {' -> '.join(stack)}")
     print("=" * 78)
     for region, rep in sorted(reports.items()):
         icon = VERDICT_ICONS.get(rep.verdict, "❓")
@@ -300,7 +326,10 @@ def print_report(target: str, reports: dict[str, RegionReport]) -> None:
             print(f"      └─ último hop MTR: {rep.mtr_last_hop}{loss}")
     print("=" * 78)
     ok = sum(1 for r in reports.values() if r.verdict == "OK")
-    print(f" Resumo: {ok}/{len(reports)} regiões OK\n")
+    print(f" Resumo: {ok}/{len(reports)} regiões OK")
+    for hint in dict.fromkeys(r.block_hint for r in reports.values() if r.block_hint):
+        print(f" >>> {hint}")
+    print()
 
 
 def save_json(reports: dict[str, RegionReport], path: str) -> None:

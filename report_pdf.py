@@ -63,7 +63,8 @@ VERDICT_LABELS = {
 # ---------------------------------------------------------------------------
 def _safe(text) -> str:
     """Converte para latin-1 substituindo caracteres nao suportados pela fonte Helvetica."""
-    return str(text or "").encode("latin-1", errors="replace").decode("latin-1")
+    text = str(text or "").replace("\u2014", "-").replace("\u2192", "->")
+    return text.encode("latin-1", errors="replace").decode("latin-1")
 
 
 def _fmt_ms(value) -> str:
@@ -211,6 +212,8 @@ def _draw_detail_section(pdf: FPDF, reports: list[dict]) -> None:
             ("Erro DNS",             rep.get("dns_error")),
             ("Ultimo hop MTR",       rep.get("mtr_last_hop")),
             ("Perda pacotes MTR",    f"{rep.get('mtr_packet_loss')}%" if rep.get("mtr_packet_loss") is not None else None),
+            ("Pilha de rede",        " -> ".join(rep.get("edge_stack") or []) or None),
+            ("Quem bloqueou",        rep.get("block_source")),
         ]
 
         for label, value in fields:
@@ -303,11 +306,20 @@ def _build_conclusion(reports: list[dict], target: str) -> str:
             "Isso pode indicar filtragem de pacotes por firewall/WAF ou indisponibilidade real nessas regioes. "
             "Recomenda-se verificar com MTR se o roteamento chega ao destino."
         )
+    stack = list(dict.fromkeys(s for r in reports for s in (r.get("edge_stack") or [])))
+    if stack:
+        lines.append(f"Pilha de rede identificada (internet -> aplicacao): {' -> '.join(stack)}.")
     if counts.get("BLOCKED"):
         lines.append(
             f"{counts['BLOCKED']} regiao(oes) receberam bloqueio geografico ou WAF (HTTP 403/451). "
             "O servidor esta acessivel mas recusa conexoes de determinadas origens."
         )
+        # Sem o ID ([CF-RAY ...]), que muda a cada requisição
+        sources = sorted({r["block_source"].split(" [")[0] for r in reports if r.get("block_source")})
+        if sources:
+            lines.append(f"Origem do bloqueio: {'; '.join(sources)}.")
+        for hint in dict.fromkeys(r["block_hint"] for r in reports if r.get("block_hint")):
+            lines.append(f"Recomendacao: {hint}")
     if counts.get("DNS_FAIL"):
         lines.append(
             f"{counts['DNS_FAIL']} regiao(oes) apresentaram falha de resolucao DNS. "
@@ -328,6 +340,11 @@ def _build_conclusion(reports: list[dict], target: str) -> str:
         lines.append(
             "CONCLUSAO: O servico esta disponivel globalmente em todas as regioes testadas. "
             "Nenhuma anomalia detectada."
+        )
+    elif ok == 0 and counts.get("BLOCKED") == total:
+        lines.append(
+            "ATENCAO: O servidor responde, mas o WAF bloqueou ou desafiou todas as regioes. "
+            "Nao e indisponibilidade: e politica de acesso."
         )
     elif ok == 0:
         lines.append(

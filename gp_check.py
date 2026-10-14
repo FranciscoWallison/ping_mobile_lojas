@@ -10,6 +10,8 @@ Uso:
     python gp_check.py odontoprev.com.br --json saida.json
 
 Sem dependências além de `requests`. Sem API key necessária.
+Se `waf_fingerprint.py` estiver na mesma pasta, o relatório também mostra a
+pilha de rede (CDN/WAF/F5/origem) e quem respondeu cada bloqueio.
 """
 from __future__ import annotations
 
@@ -22,6 +24,11 @@ from dataclasses import dataclass, field, asdict
 from pathlib import Path
 
 import requests
+
+try:  # opcional: identifica CDN/WAF/F5/origem quando o módulo está ao lado
+    from waf_fingerprint import classify_block, fingerprint_response, stack_labels
+except ImportError:
+    classify_block = fingerprint_response = stack_labels = None
 
 OUTPUT_DIR = Path(__file__).parent / "output"
 
@@ -90,6 +97,9 @@ class Report:
     dns_resolved_ips: list[str] = field(default_factory=list)
     mtr_last_hop: str = ""
     mtr_packet_loss: float | None = None
+    edge_stack: list[str] = field(default_factory=list)
+    block_source: str = ""
+    block_hint: str = ""
     verdict: str = "UNKNOWN"
     notes: list[str] = field(default_factory=list)
 
@@ -134,6 +144,13 @@ def parse_http(res: dict, reports: dict[str, Report]):
             rep.http_tls_subject = (tls.get("subject") or {}).get("CN", "")
             rep.http_tls_issuer = (tls.get("issuer") or {}).get("CN", "")
 
+        known_block = None
+        if fingerprint_response:
+            headers, body = r.get("headers") or {}, r.get("rawBody") or ""
+            rep.edge_stack = stack_labels(fingerprint_response(headers, body))
+            block = classify_block(rep.http_status, headers, body)
+            known_block = block if block and block.source != "indefinido" else None
+
         if r.get("status") == "failed" or rep.http_status is None:
             if "timeout" in raw or "timed out" in raw:
                 rep.verdict = "TIMEOUT"
@@ -152,12 +169,16 @@ def parse_http(res: dict, reports: dict[str, Report]):
             rep.verdict = "OK"
         elif rep.http_status in (403, 451):
             rep.verdict = "BLOCKED"
-            rep.notes.append(f"HTTP {rep.http_status} — provável bloqueio/WAF")
+            rep.block_source = known_block.short() if known_block else ""
+            rep.block_hint = known_block.hint if known_block else ""
+            rep.notes.append(f"HTTP {rep.http_status} — {rep.block_source or 'provável bloqueio/WAF'}")
         elif rep.http_status >= 500:
             rep.verdict = "ERROR"
             rep.notes.append(f"HTTP {rep.http_status}")
         else:
-            rep.notes.append(f"HTTP {rep.http_status}")
+            rep.block_source = known_block.short() if known_block else ""
+            rep.notes.append(f"HTTP {rep.http_status}"
+                             + (f" — {rep.block_source}" if rep.block_source else ""))
 
 
 def parse_dns(res: dict, reports: dict[str, Report]):
@@ -257,6 +278,9 @@ ICONS = {
 def print_report(target: str, reports: dict[str, Report]):
     print("\n" + "=" * 78)
     print(f" RELATÓRIO — {target}")
+    stack = list(dict.fromkeys(s for r in reports.values() for s in r.edge_stack))
+    if stack:
+        print(f" Pilha de rede: {' -> '.join(stack)}")
     print("=" * 78)
     for region, rep in sorted(reports.items()):
         line = f"{ICONS.get(rep.verdict, '[?]')}{region:<30}"
@@ -276,11 +300,16 @@ def print_report(target: str, reports: dict[str, Report]):
             print(f"      -> último hop MTR: {rep.mtr_last_hop}{loss}")
     print("=" * 78)
     ok = sum(1 for r in reports.values() if r.verdict == "OK")
+    blocked = sum(1 for r in reports.values() if r.verdict == "BLOCKED")
     print(f" Resumo: {ok}/{len(reports)} regiões OK")
     if ok >= len(reports) * 0.7:
         print(" >>> Site está NO AR. Se ping estava falhando, é ICMP filtrado, não outage.")
+    elif ok == 0 and blocked == len(reports):
+        print(" >>> O servidor RESPONDE, mas o WAF bloqueou/desafiou todas as regiões — não é queda.")
     elif ok == 0:
         print(" >>> Nenhuma região conseguiu — alvo provavelmente realmente indisponível.")
+    for hint in dict.fromkeys(r.block_hint for r in reports.values() if r.block_hint):
+        print(f" >>> {hint}")
     print()
 
 

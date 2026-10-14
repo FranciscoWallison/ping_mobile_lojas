@@ -10,6 +10,8 @@ COPY gp_check.py .
 COPY run_check.py .
 COPY validate_odontoprev.py .
 COPY report_pdf.py .
+COPY waf_fingerprint.py .
+COPY waf_detect.py .
 
 # Volume para salvar JSON e PDF gerados
 VOLUME ["/app/output"]

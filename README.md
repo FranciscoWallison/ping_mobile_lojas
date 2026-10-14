@@ -18,6 +18,7 @@ Esta ferramenta valida o que realmente importa:
 |---|---|
 | **HTTPS (HTTP GET)** | Prova que o servidor web está respondendo de verdade — não apenas "vivo na rede" |
 | **DNS** | Confirma que o domínio resolve para o IP correto em cada região — detecta GeoDNS e envenenamento de DNS |
+| **Pilha de rede** | Identifica CDN, WAF, balanceador (F5) e servidor de origem, e qual deles respondeu um bloqueio |
 | **MTR (traceroute)** | Mostra exatamente onde o pacote morre quando há falha — se para no meio da rota ou chega ao destino |
 
 ---
@@ -90,14 +91,20 @@ O Google Play e a Apple App Store validam URLs (como política de privacidade) a
 - `TIMEOUT` → WAF descartou o pacote sem responder (modo silencioso)
 - `BLOCKED` → WAF respondeu com HTTP 403/451 (modo explícito)
 - O MTR chega ao servidor, mas o HTTP não responde → o bloqueio acontece na camada de aplicação, não na rede
+- **Pilha de rede** → headers, cookies, CNAME e ASN identificam cada camada (ex.: `Cloudflare (borda/CDN) -> IIS / ASP.NET (origem)`)
+- **Quem bloqueou** → a página de bloqueio identifica a camada que respondeu e o ID do evento (`CF-RAY`, `Support ID` do F5, `Reference #` da Akamai...)
 
 **Exemplos de WAFs comuns:**
 
-- **Cloudflare** — muito comum em sites brasileiros; bloqueia por reputação de IP
-- **AWS WAF** — usado com CloudFront e API Gateway
-- **Akamai Kona** — comum em grandes empresas e bancos
-- **F5 / NGINX App Protect** — infraestrutura on-premise
-- **Imperva** — foco em proteção contra DDoS e bots
+| WAF | Onde fica | Como reconhecer |
+|---|---|---|
+| **Cloudflare** | Borda (nuvem) | `server: cloudflare`, `cf-ray`; IP no AS13335; desafio JS com `cf-mitigated: challenge` |
+| **AWS WAF** | Borda (CloudFront / ALB / API Gateway) | `x-amz-cf-id`, `x-amzn-waf-action`, cookie `aws-waf-token` |
+| **Akamai Kona / App & API Protector** | Borda (nuvem) | `server: AkamaiGHost`, cookies `_abck`/`bm_sz`; página "Access Denied … Reference #" |
+| **F5 BIG-IP (LTM + ASM/Advanced WAF)** | Appliance on-premise | cookies `BIGipServer<pool>` (LTM) e `TS01xxxxxx` (ASM); página "The requested URL was rejected … support ID" |
+| **Imperva** | Borda (nuvem) | `x-iinfo`, cookies `visid_incap_*`/`incap_ses_*`; "Incapsula incident ID" |
+
+> Guia completo, com passo a passo manual, tabelas de assinaturas, F5 em detalhe e estudo de caso real: **[docs/identificar-waf-e-rede.md](docs/identificar-waf-e-rede.md)**
 
 ### GeoDNS
 Técnica onde o servidor DNS retorna IPs diferentes dependendo da localização do requisitante. É legítimo em CDNs (para direcionar o usuário ao servidor mais próximo), mas pode ser confundido com envenenamento de DNS. O monitor detecta automaticamente quando IPs DNS divergem entre regiões.
@@ -199,6 +206,56 @@ python validate_odontoprev.py
 
 ---
 
+### `waf_detect.py` — Qual CDN/WAF/F5 está na frente, e quem está bloqueando?
+
+Análise **local**, a partir da sua rede. Diferente do GlobalPing, aceita **POST com corpo e headers**, então reproduz exatamente uma chamada de API.
+
+```bash
+# Pilha de rede de um site
+python waf_detect.py odontoprev.com.br
+
+# Reproduzir uma chamada de API (mesmos parâmetros do curl)
+python waf_detect.py https://api.exemplo.com/v1/rota -X POST \
+  -H "Content-Type: application/json" -d '{"id": 1}'
+
+# Simular vários clientes (descobre se a regra é por User-Agent)
+python waf_detect.py exemplo.com --perfis curl navegador insomnia postman okhttp ios
+
+# Salvar evidências em JSON (vai para output/) para anexar ao chamado
+python waf_detect.py exemplo.com --json exemplo_waf.json
+```
+
+**O que ele mostra:**
+
+| Item | Para que serve |
+|---|---|
+| Seu IP de saída + ASN | É o IP que o WAF avalia. Compare VPN ligada/desligada e máquinas diferentes |
+| DNS local × público | Detecta *split-horizon*: na rede interna o nome pode apontar para um destino que não passa pelo WAF |
+| CNAME e ASN dos IPs do alvo | CDN em nuvem (Cloudflare, Akamai...) ou datacenter próprio (appliance F5, FortiWeb...) |
+| Pilha detectada | Cada camada, da internet até a aplicação, com a evidência (header/cookie/CNAME/ASN) |
+| Requisição por perfil | `curl`, `navegador`, `insomnia`, `postman`, `okhttp`, `ios`, `python` |
+| Quem bloqueou | Camada + tipo (desafio, bloqueio, rate limit, origem) + ID do evento + próximo passo |
+| `/cdn-cgi/trace` | Em alvos Cloudflare: IP e PoP que o Cloudflare enxerga para você |
+| Cookie `BIGipServer` | Pool do F5; avisa se o cookie vaza o IP:porta interno (não criptografado) |
+
+Exemplo real:
+
+```
+ Pilha detectada (internet -> aplicação):
+   - Cloudflare (borda/CDN)
+       . IP no ASN 13335 CLOUDFLARENET - Cloudflare, Inc., US
+       . header cf-ray: a4a793d55d4300e6-GRU
+       . header server: cloudflare
+   - IIS / ASP.NET (origem)
+       . header x-powered-by: ASP.NET
+```
+
+> **Dica:** rode o mesmo comando em duas redes, por exemplo a sua máquina e a máquina do domínio. Se a pilha é igual e só o resultado muda, a regra depende do IP/rede de origem.
+
+O módulo de assinaturas fica em `waf_fingerprint.py`. O `gp_check.py`, o `run_check.py` e o `report_pdf.py` usam esse módulo para mostrar a **pilha de rede** e **quem bloqueou** em cada região.
+
+---
+
 ### `report_pdf.py` — Gerador de Relatório PDF
 
 Gera um PDF completo com cabeçalho (autor, data/hora), tabela resumo colorida, detalhamento por região e conclusão automática.
@@ -289,11 +346,25 @@ O GlobalPing usa um campo "magic" flexível para identificar regiões:
 ### BLOCKED (HTTP 403)
 
 ```
-🚫 BLOCKED  Frankfurt, DE    HTTP 403
-      └─ HTTP 403 — provável bloqueio/WAF
+ RELATÓRIO — obrsos.odontosystem.com.br
+ Pilha de rede: Cloudflare (borda/CDN)
+[BLOCKED] Falkenstein, DE   HTTP 403  total=108ms  ip=172.67.73.241
+      -> HTTP 403 — Cloudflare: Managed Challenge (desafio JS) [CF-RAY a4a797a10cfbf7ae-FRA]
 ```
 
-**Interpretação:** O servidor está no ar, mas recusa conexões dessa origem. Pode ser bloqueio por país, ASN, User-Agent, ou política do WAF.
+**Interpretação:** O servidor está no ar, mas recusa conexões dessa origem. Pode ser bloqueio por país, ASN, User-Agent ou política do WAF.
+
+O monitor agora informa **qual camada** respondeu e o **ID do evento**:
+
+| Mensagem | Significado | Para quem abrir chamado |
+|---|---|---|
+| `Cloudflare: Managed Challenge (desafio JS)` | A borda pediu JavaScript. Clientes sem navegador (curl, Insomnia, app) nunca passam | Time do Cloudflare, com o `CF-RAY` |
+| `Cloudflare: erro 1020 …` | Bloqueio por regra de firewall | Time do Cloudflare, com o `CF-RAY` |
+| `F5 BIG-IP ASM / Advanced WAF: violação de política ASM` | O WAF do F5 rejeitou a requisição | Segurança/redes, com o `Support ID` |
+| `Akamai: negado …` | Bloqueio na borda Akamai | Time da Akamai, com o `Reference #` |
+| `IIS (origem): negado pelo próprio servidor IIS` | O WAF deixou passar; quem negou foi a aplicação/servidor | Time da aplicação |
+
+Se todas as regiões forem `BLOCKED`, o resumo deixa claro que **não é queda**, e sim política de acesso.
 
 ---
 
@@ -344,6 +415,10 @@ files/
 ├── run_check.py             # CLI que usa globalping_monitor como módulo
 ├── validate_odontoprev.py   # Script específico para odontoprev.com.br
 ├── report_pdf.py            # Gerador de relatório PDF (autor, data/hora, tabelas)
+├── waf_detect.py            # CLI local: pilha CDN/WAF/F5/origem + quem bloqueou (aceita POST)
+├── waf_fingerprint.py       # Assinaturas de CDN/WAF/balanceador/origem e classificador de bloqueio
+├── docs/
+│   └── identificar-waf-e-rede.md  # Guia: como identificar CDN/WAF/F5 e quem bloqueou
 ├── output/                  # Saídas geradas (JSONs e PDFs) — ignorada pelo git
 │   └── .gitkeep             # Mantém a pasta no repositório mesmo vazia
 ├── requirements.txt         # Dependências Python: requests, fpdf2
@@ -361,5 +436,5 @@ files/
 2. **Agendamento** — executar o monitor em intervalos regulares (cron, GitHub Actions)
 3. **Dashboard** — visualizar histórico de resultados em gráfico de disponibilidade
 4. **Fingerprint TLS** — detectar MITM comparando o certificado entre regiões
-5. **Análise de CDN** — identificar headers de CDN (Cloudflare, Akamai, AWS CloudFront) por região
+5. **Comparar redes automaticamente**: rodar o `waf_detect.py` em duas redes (ex.: máquina do domínio × máquina local) e gerar o diff
 6. **Modo watch** — repetir a verificação automaticamente a cada N minutos
